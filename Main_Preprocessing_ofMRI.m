@@ -10,43 +10,46 @@ addpath(genpath(codepath));
 template = fullfile(wholepath,'\temp\mice_Template.nii');
 templatmask= spm_read_vols(spm_vol(fullfile(wholepath,'\temp\mice_Template_mask.nii')));
 
-Animal_path{01} =fullfile(wholepath,'20201231_100357_20201231_VTA_test_mouse01_1_1\');
-Animal_path{02} =fullfile(wholepath,'20201231_100357_20201231_VTA_test_mouse02_1_1\');
+Animal_path{01} = fullfile(wholepath,'20201231_100357_20201231_zyj_BF_chat_mouse01_1_1');
+Animal_path{02} = fullfile(wholepath,'20210106_101855_20210106_zyj_BF_chat_mouse02_1_1');
 
-Animal_EPI_type       = {'10s_duration';};
+Animal_EPI_type  = {'0.5s_duration';'2s_duration';};
 
-Animal_EPI_folder{01} = {[10 11 12]};
-Animal_EPI_folder{02} = {[10 11 12]};
+Animal_EPI_folder{01} = {[10 11 12], [15 16 17]}; %
+Animal_EPI_folder{02} = {[10 11 12],[15 16 17]}
+
 
 Animal_T2RARE = {5,5};
-Animal_B0map  = {6,6};
+Animal_B0map = {6,6};
 
 %% tsfMRI
-duration = [10];
-OFFwait = 40;
-interval=[40,35,30,45,43,39,38,50,36,37];%
-onset = [cumsum([0 dur*ones(1,numel(interval)-1)])+cumsum([OFFwait interval(1:end-1)])];
+dur = [0.5,2]; % block analysis
+OFFwait = 15;
+interval=[15,19.5,10.5,12,13.5,19.5,12,13.5,19.5,10.5,13.5,10.5,12,16.5,10.5,16.5,18,16.5,16.5,15,18,15,19.5,15,18,12,13.5,18];%
+onset1 = [cumsum([0 dur(1)*ones(1,numel(interval)-1)])+cumsum([OFFwait interval(1:end-1)])];
+onset2 = [cumsum([0 dur(2)*ones(1,numel(interval)-1)])+cumsum([OFFwait interval(1:end-1)])];
+ons=[onset1;onset2];
 
-%1:Bruker2nifiti---2:slicetiming
+%1:Bruker2nifiti--2:slicetiming
 %3:mask image---4:realiment---5:calculate VDM---6:Coregistration---7:normalize
-%8:smooth---9:GLM
+%8:smooth---9:template mask---10:GLM
 
-for number =[1:2]%mice number
+
+for number =[1 2]%
     path = Animal_path{number};
     EPI_folder = sort(spm_cat(Animal_EPI_folder{number}),'ascend');
-    RARE = Animal_T2RARE{number};
-    Fieldmap = Animal_B0map{number};
+    %     RARE = Animal_T2RARE{number};
+    %     Fieldmap = Animal_B0map{number};
     spm('defaults', 'FMRI');
     set(spm('CreateIntWin','off'),'Visible','on');
     
-    for flag_stage =[16]
+    for flag_stage =[1:10]
         if flag_stage == 1
             %% Bruker2nifiti
             Bruker2nifti_multislice(path,RARE,'mouse');
             Bruker2nifti_multislice(path,Fieldmap,'mouse');
             Bruker2nifti_multislice(path,EPI_folder,'mouse');
         end
-        
         
         if flag_stage == 2
             %% Slicetiming
@@ -140,17 +143,22 @@ for number =[1:2]%mice number
             clear Smooth_mlb;
         end
         
-        if flag_stage == 9
+        if  flag_stage== 9
+            
+            MY_mask_images(path,EPI_folder,'snrms2dseq.nii', templatmask,'snrms2dseq.nii','EPI');
+        end
+        
+        if flag_stage == 10
             for idx =1:numel(Animal_EPI_type)
                 protocol = Animal_EPI_type{idx};
                 folder = Animal_EPI_folder{number}{idx};
-                
-                %% tsfMRI
+                duration=dur(idx);
+                onset=ons(idx,:);
                 colorbar = [-5 -1.65 1.65 5];
                 Reg_choices = {'rp';'rp"';'PCs'};
                 
                 result_1st = struct('weights',1,'slice',1:35,'template',template,'FDR_pvalue',0.05,'colorbar',colorbar);
-                %                         % individual scan
+                %                         % individual
                 defined_1st = struct('Nscans','individual','filename','^snrms2dseq','duration',duration,'onset',onset);
                 MY_task_state_statistics(path,'Results',{folder(:)},[1 Inf],Reg_choices,defined_1st,result_1st);
                 %                         Allscans
@@ -161,8 +169,8 @@ for number =[1:2]%mice number
                 cd([path '\Functions\tsfMRI']);
                 if exist(['Allscans_',protocol],'dir');rmdir(['Allscans_',protocol]);end
                 eval(['!rename,Allscans,Allscans_',protocol])
+                % ---------- delete it after this protocol ----------
             end
         end
     end
 end
-
